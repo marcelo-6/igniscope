@@ -43,6 +43,7 @@ pub fn inspect_archive(archive_path: &Path) -> Result<ArchiveInspection, AppErro
     inspect_entries(archive_path, &entries)
 }
 
+// TODO This might not be needed later (a list of ALL files in the zip archive if we already know the interested files locations)
 pub fn list_archive_entries(archive_path: &Path) -> Result<Vec<String>, AppError> {
     let file = File::open(archive_path).map_err(|err| {
         AppError::archive_read(archive_path, format!("could not open file: {err}"))

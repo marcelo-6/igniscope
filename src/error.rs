@@ -15,6 +15,7 @@ pub enum AppError {
     JsonParse {
         details: String,
     },
+    // TODO better naming
     ManifestIntegrity {
         details: String,
     },
@@ -79,6 +80,7 @@ impl Display for AppError {
 
 impl Error for AppError {}
 
+// TODO define better error codes
 pub fn exit_code_for_error(err: &AppError) -> i32 {
     match err {
         AppError::ArchiveRead { .. } => 10,

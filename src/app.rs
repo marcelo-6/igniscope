@@ -10,6 +10,7 @@ pub fn run_summarize(archive_path: &Path, verbose: u8) -> Result<(), AppError> {
     println!("archive_path: {}", archive_path.display());
     println!("verbose: {verbose}");
     println!("archive_kind: {}", inspection.archive_kind.as_str());
+    println!("project_selection: {:#?}", inspection.project_selection);
     println!(
         "detected_project_roots: {:?}",
         inspection.detected_project_roots
@@ -29,6 +30,7 @@ pub fn run_analyze(archive_path: &Path, out_dir: &Path, verbose: u8) -> Result<(
     println!("out_dir: {}", out_dir.display());
     println!("verbose: {verbose}");
     println!("archive_kind: {}", inspection.archive_kind.as_str());
+    println!("project_selection: {:#?}", inspection.project_selection);
     println!(
         "detected_project_roots: {:?}",
         inspection.detected_project_roots
