@@ -48,8 +48,9 @@ pub fn list_archive_entries(archive_path: &Path) -> Result<Vec<String>, AppError
         AppError::archive_read(archive_path, format!("could not open file: {err}"))
     })?;
 
-    let mut archive = ZipArchive::new(file)
-        .map_err(|err| AppError::archive_read(archive_path, format!("not a valid zip archive: {err}")))?;
+    let mut archive = ZipArchive::new(file).map_err(|err| {
+        AppError::archive_read(archive_path, format!("not a valid zip archive: {err}"))
+    })?;
 
     let mut entries = Vec::with_capacity(archive.len());
     for index in 0..archive.len() {
@@ -169,8 +170,8 @@ mod tests {
 
     #[test]
     fn archive_kind_detects_gateway_backup_fixture() {
-        let archive =
-            inspect_archive(&fixture_path("multi-project.gwbk")).expect("fixture should be inspectable");
+        let archive = inspect_archive(&fixture_path("multi-project.gwbk"))
+            .expect("fixture should be inspectable");
         assert_eq!(archive.archive_kind, ArchiveKind::GatewayBackup);
     }
 
@@ -201,8 +202,8 @@ mod tests {
 
     #[test]
     fn project_roots_for_multi_project_gateway_are_sorted() {
-        let archive =
-            inspect_archive(&fixture_path("multi-project.gwbk")).expect("fixture should be inspectable");
+        let archive = inspect_archive(&fixture_path("multi-project.gwbk"))
+            .expect("fixture should be inspectable");
         assert_eq!(
             archive.detected_project_roots,
             vec![
@@ -216,7 +217,10 @@ mod tests {
                 "projects/samplequickstart/".to_string(),
             ]
         );
-        assert_eq!(archive.detected_project_roots, archive.selected_project_roots);
+        assert_eq!(
+            archive.detected_project_roots,
+            archive.selected_project_roots
+        );
         assert_eq!(
             archive.project_selection,
             ProjectSelection::Multiple {
