@@ -16,6 +16,9 @@ rustc := require("rustc")
 # `cargo metadata --format-version=1 | jq '.packages[]|select(.name=="rust-template").version'`
 version := `cargo pkgid | sed -rn s'/^.*#(.*)$/\1/p'`
 
+# coverage threshold to fail (CI)
+coverage_threshold := "70"
+
 # show available commands
 [group('project-agnostic')]
 default:
@@ -56,8 +59,14 @@ clean:
 
 # show test coverage (requires https://lib.rs/crates/cargo-llvm-cov)
 [group('development')]
-coverage:
-    cargo llvm-cov
+coverage threshold=coverage_threshold:
+    cargo llvm-cov --fail-under-lines {{threshold}} --show-missing-lines --quiet
+alias cov := coverage
+
+# run ci workflow (lint, check, test, cov) (requires https://lib.rs/crates/cargo-llvm-cov)
+[group('ci')]
+ci: lint check
+    cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info --fail-under-lines {{coverage_threshold}} --quiet
 
 # show dependencies of this project
 [group('development')]
