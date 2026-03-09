@@ -1,6 +1,7 @@
 use clap::Parser;
 use ign_inspect::app;
 use ign_inspect::cli::{Cli, Command};
+use ign_inspect::error::exit_code_for_error;
 
 fn main() {
     let cli = Cli::parse();
@@ -15,6 +16,6 @@ fn main() {
 
     if let Err(err) = result {
         eprintln!("{err}");
-        std::process::exit(app::exit_code_for_error(&err));
+        std::process::exit(exit_code_for_error(&err));
     }
 }
