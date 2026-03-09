@@ -5,6 +5,7 @@
 # Rust: https://rust-lang.org/tools/install
 cargo := require("cargo")
 rustc := require("rustc")
+git-cliff := require("git-cliff")
 
 # ---------------------------------------------------------------------------- #
 #                                    RECIPES                                   #
@@ -18,6 +19,9 @@ version := `cargo pkgid | sed -rn s'/^.*#(.*)$/\1/p'`
 
 # coverage threshold to fail (CI)
 coverage_threshold := "70"
+
+# semver tag pattern
+semver_tag_pattern := "^v?[0-9]+\\.[0-9]+\\.[0-9]+$"
 
 # show available commands
 [group('project-agnostic')]
@@ -67,6 +71,18 @@ alias cov := coverage
 [group('ci')]
 ci: lint check
     cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info --fail-under-lines {{coverage_threshold}} --quiet
+
+# generate the full changelog into CHANGELOG.md.
+[group('cd')]
+changelog:
+    git-cliff --config cliff.toml --tag-pattern '{{semver_tag_pattern}}' --output CHANGELOG.md
+
+# dry run changelog generation.
+[group('development')]
+changelog-dry-run:
+    next="$(git-cliff --config cliff.toml --bumped-version --unreleased --tag-pattern '{{semver_tag_pattern}}')"; \
+    echo "Project version {{version}} -> next ${next}"
+    git-cliff --config cliff.toml --unreleased --tag "${next}" --tag-pattern '{{semver_tag_pattern}}'
 
 # show dependencies of this project
 [group('development')]
