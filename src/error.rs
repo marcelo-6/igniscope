@@ -106,7 +106,7 @@ impl Display for AppError {
                 archive_path.display(),
                 details
             ),
-            Self::ResourceIntegrity { details } => write!(f, "Manifest integrity error: {details}"),
+            Self::ResourceIntegrity { details } => write!(f, "Resource integrity error: {details}"),
             Self::Internal { details } => write!(f, "Internal error: {details}"),
         }
     }

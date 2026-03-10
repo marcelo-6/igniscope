@@ -78,6 +78,31 @@ pub struct ProjectResourceInventory {
     pub resources: Vec<Resource>,
 }
 
+/// Aggregated deterministic counters for one project resource inventory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectCounts {
+    pub resources_total: usize,
+    pub files_total: usize,
+    pub binary_only_resources: usize,
+    pub resources_by_section: BTreeMap<String, usize>,
+    pub resources_by_type: BTreeMap<String, usize>,
+    pub files_by_kind: BTreeMap<String, usize>,
+}
+
+/// Coverage values derived from classified resources in one project.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoverageMetrics {
+    pub unknown_resources: usize,
+    pub unknown_ratio: f64,
+}
+
+/// Classification result for a single resource path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Classification {
+    section: &'static str,
+    type_key: &'static str,
+}
+
 #[derive(Debug, Deserialize)]
 struct RawProjectFile {
     title: String,
@@ -96,6 +121,42 @@ struct RawProjectFile {
 const fn default_enabled() -> bool {
     true
 }
+
+const SECTION_PERSPECTIVE: &str = "Perspective";
+const SECTION_SCRIPTING: &str = "Scripting";
+const SECTION_NAMED_QUERIES: &str = "Named Queries";
+const SECTION_SFC: &str = "Sequential Function Charts (SFC)";
+const SECTION_EVENT_STREAMS: &str = "Event Streams";
+const SECTION_REPORTS: &str = "Reports";
+const SECTION_ALARM_PIPELINES: &str = "Alarm Notification Pipelines";
+const SECTION_PROPERTIES: &str = "Properties";
+const SECTION_OTHER: &str = "Other";
+
+const TYPE_PERSPECTIVE_VIEW: &str = "perspective.view";
+const TYPE_PERSPECTIVE_PAGE_CONFIG: &str = "perspective.page_config";
+const TYPE_PERSPECTIVE_STYLE_CLASS: &str = "perspective.style_class";
+const TYPE_PERSPECTIVE_STYLESHEET: &str = "perspective.stylesheet";
+const TYPE_PERSPECTIVE_MESSAGE_HANDLER: &str = "perspective.message_handler";
+const TYPE_PERSPECTIVE_FORM_SUBMISSION_HANDLER: &str = "perspective.form_submission_handler";
+const TYPE_PERSPECTIVE_KEY_EVENT: &str = "perspective.key_event";
+const TYPE_PERSPECTIVE_STARTUP: &str = "perspective.startup";
+const TYPE_PERSPECTIVE_SHUTDOWN: &str = "perspective.shutdown";
+const TYPE_PERSPECTIVE_ACCELEROMETER: &str = "perspective.accelerometer";
+const TYPE_PERSPECTIVE_BARCODE: &str = "perspective.barcode";
+const TYPE_PERSPECTIVE_BLUETOOTH: &str = "perspective.bluetooth";
+const TYPE_PERSPECTIVE_AUTH_CHALLENGE: &str = "perspective.auth_challenge";
+const TYPE_PERSPECTIVE_NFC_SCAN: &str = "perspective.nfc_scan";
+const TYPE_PERSPECTIVE_PAGE_STARTUP: &str = "perspective.page_startup";
+const TYPE_PERSPECTIVE_SESSION_PROPS: &str = "perspective.session_props";
+const TYPE_SCRIPT_PYTHON: &str = "script.python";
+const TYPE_SCRIPT_GATEWAY_EVENT: &str = "script.gateway_event";
+const TYPE_NAMED_QUERY: &str = "named_query";
+const TYPE_SFC: &str = "sfc";
+const TYPE_EVENT_STREAM: &str = "event_stream";
+const TYPE_REPORT: &str = "report";
+const TYPE_ALARM_PIPELINE: &str = "alarm_pipeline";
+const TYPE_PROJECT_PROPERTIES: &str = "project_properties";
+const TYPE_UNKNOWN: &str = "unknown";
 
 /// Inspects an archive and returns its kind plus selected project.
 pub fn inspect_archive(archive_path: &Path) -> Result<ArchiveInspection, AppError> {
@@ -225,6 +286,228 @@ pub fn discover_resources_for_root(
         .unwrap_or_default())
 }
 
+/// Aggregates deterministic resource/file counters for a project.
+pub fn compute_project_counts(resources: &[Resource]) -> ProjectCounts {
+    let mut resources_by_section = BTreeMap::new();
+    let mut resources_by_type = BTreeMap::new();
+    let mut files_by_kind = BTreeMap::new();
+    let mut files_total = 0usize;
+    let mut binary_only_resources = 0usize;
+
+    for resource in resources {
+        *resources_by_section
+            .entry(resource.section.clone())
+            .or_insert(0usize) += 1;
+        *resources_by_type
+            .entry(resource.type_key.clone())
+            .or_insert(0usize) += 1;
+
+        if resource.binary_only {
+            binary_only_resources += 1;
+        }
+
+        files_total += resource.files.len();
+        for file in &resource.files {
+            *files_by_kind
+                .entry(file.file_kind.clone())
+                .or_insert(0usize) += 1;
+        }
+    }
+
+    ProjectCounts {
+        resources_total: resources.len(),
+        files_total,
+        binary_only_resources,
+        resources_by_section,
+        resources_by_type,
+        files_by_kind,
+    }
+}
+
+/// Computes unknown-resource coverage metrics for one project.
+pub fn compute_coverage(resources: &[Resource]) -> CoverageMetrics {
+    let unknown_resources = resources
+        .iter()
+        .filter(|resource| resource.type_key == TYPE_UNKNOWN)
+        .count();
+    let total = resources.len();
+    let unknown_ratio = if total == 0 {
+        0.0
+    } else {
+        unknown_resources as f64 / total as f64
+    };
+
+    CoverageMetrics {
+        unknown_resources,
+        unknown_ratio,
+    }
+}
+
+/// Classifies a normalized resource path into section and `type_key`.
+fn classify_resource_path(path: &str) -> Classification {
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/views") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_VIEW,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/page-config") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_PAGE_CONFIG,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/style-classes") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_STYLE_CLASS,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/stylesheet") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_STYLESHEET,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/message") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_MESSAGE_HANDLER,
+        };
+    }
+    if is_prefix_or_exact(
+        path,
+        "com.inductiveautomation.perspective/form-submission-handler",
+    ) {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_FORM_SUBMISSION_HANDLER,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/key-event") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_KEY_EVENT,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/startup") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_STARTUP,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/shutdown") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_SHUTDOWN,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/accelerometer") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_ACCELEROMETER,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/barcode") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_BARCODE,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/bluetooth") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_BLUETOOTH,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/auth-challenge") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_AUTH_CHALLENGE,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/nfc-scan") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_NFC_SCAN,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/page-startup") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_PAGE_STARTUP,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.perspective/session-props") {
+        return Classification {
+            section: SECTION_PERSPECTIVE,
+            type_key: TYPE_PERSPECTIVE_SESSION_PROPS,
+        };
+    }
+    if is_prefix_or_exact(path, "ignition/script-python") {
+        return Classification {
+            section: SECTION_SCRIPTING,
+            type_key: TYPE_SCRIPT_PYTHON,
+        };
+    }
+    if is_prefix_or_exact(path, "ignition/startup")
+        || is_prefix_or_exact(path, "ignition/shutdown")
+        || is_prefix_or_exact(path, "ignition/update")
+        || is_prefix_or_exact(path, "ignition/timer")
+        || is_prefix_or_exact(path, "ignition/tag-change")
+        || is_prefix_or_exact(path, "ignition/scheduled")
+        || is_prefix_or_exact(path, "ignition/event-scripts")
+    {
+        return Classification {
+            section: SECTION_SCRIPTING,
+            type_key: TYPE_SCRIPT_GATEWAY_EVENT,
+        };
+    }
+    if is_prefix_or_exact(path, "ignition/named-query") {
+        return Classification {
+            section: SECTION_NAMED_QUERIES,
+            type_key: TYPE_NAMED_QUERY,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.sfc") {
+        return Classification {
+            section: SECTION_SFC,
+            type_key: TYPE_SFC,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.eventstream") {
+        return Classification {
+            section: SECTION_EVENT_STREAMS,
+            type_key: TYPE_EVENT_STREAM,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.reporting") {
+        return Classification {
+            section: SECTION_REPORTS,
+            type_key: TYPE_REPORT,
+        };
+    }
+    if is_prefix_or_exact(path, "com.inductiveautomation.alarm-notification") {
+        return Classification {
+            section: SECTION_ALARM_PIPELINES,
+            type_key: TYPE_ALARM_PIPELINE,
+        };
+    }
+    if is_prefix_or_exact(path, "ignition/global-props")
+        || is_prefix_or_exact(path, "ignition/designer-properties")
+    {
+        return Classification {
+            section: SECTION_PROPERTIES,
+            type_key: TYPE_PROJECT_PROPERTIES,
+        };
+    }
+
+    Classification {
+        section: SECTION_OTHER,
+        type_key: TYPE_UNKNOWN,
+    }
+}
+
 /// Discovers and validates root-scoped resources from an opened archive.
 fn discover_resources_for_root_in_archive(
     archive: &mut ZipArchive<File>,
@@ -265,10 +548,12 @@ fn discover_resources_for_root_in_archive(
             entry_set,
         )?;
         let resource_path = resource_path_for_project_root(&resource_json_path, project_root);
+        let classification = classify_resource_path(&resource_path);
+        // println!("resource_path: {:#?} classification={:#?} files={:#?}", resource_path, classification, files);
 
         resources.push(Resource {
-            section: "Other".to_string(),
-            type_key: "unknown".to_string(),
+            section: classification.section.to_string(),
+            type_key: classification.type_key.to_string(),
             path: resource_path,
             resource_json_path,
             binary_only: is_binary_only_resource(&files),
@@ -471,6 +756,18 @@ fn resource_folder_path(resource_json_path: &str) -> Option<&str> {
     resource_json_path.strip_suffix("resource.json")
 }
 
+/// Returns true when `path` equals `prefix` or starts with `prefix/`.
+fn is_prefix_or_exact(path: &str, prefix: &str) -> bool {
+    if path == prefix {
+        return true;
+    }
+
+    match path.strip_prefix(prefix) {
+        Some(rest) => rest.starts_with('/'),
+        None => false,
+    }
+}
+
 /// Maps a declared resource filename to a normalized file-kind label.
 fn file_kind_from_declared_name(declared_file_name: &str) -> String {
     let file_name = declared_file_name
@@ -610,11 +907,12 @@ struct RawResource {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::path::{Path, PathBuf};
 
     use super::{
-        ArchiveKind, ProjectSelection, build_resource_files, detect_archive_kind,
+        ArchiveKind, ProjectSelection, Resource, ResourceFile, build_resource_files,
+        classify_resource_path, compute_coverage, compute_project_counts, detect_archive_kind,
         detect_gateway_project_roots, discover_resources_for_root, discover_resources_for_roots,
         inspect_archive, is_binary_only_resource, parse_project_json_bytes, parse_project_metadata,
         parse_resource,
@@ -626,6 +924,33 @@ mod tests {
             .join("tests")
             .join("example-files")
             .join(file_name)
+    }
+
+    fn synthetic_resource(
+        section: &str,
+        type_key: &str,
+        path: &str,
+        binary_only: bool,
+        file_kinds: &[&str],
+    ) -> Resource {
+        let files = file_kinds
+            .iter()
+            .enumerate()
+            .map(|(index, kind)| ResourceFile {
+                file_kind: (*kind).to_string(),
+                file_zip_path: format!("{path}/file_{index}"),
+            })
+            .collect();
+
+        Resource {
+            section: section.to_string(),
+            type_key: type_key.to_string(),
+            path: path.to_string(),
+            resource_json_path: format!("{path}/resource.json"),
+            binary_only,
+            attributes: BTreeMap::new(),
+            files,
+        }
     }
 
     #[test]
@@ -842,7 +1167,7 @@ mod tests {
 
         match err {
             AppError::ResourceIntegrity { .. } => {}
-            other => panic!("expected manifest integrity error, got: {other:?}"),
+            other => panic!("expected resource integrity error, got: {other:?}"),
         }
     }
 
@@ -857,7 +1182,7 @@ mod tests {
 
         match err {
             AppError::ResourceIntegrity { .. } => {}
-            other => panic!("expected manifest integrity error, got: {other:?}"),
+            other => panic!("expected resource integrity error, got: {other:?}"),
         }
     }
 
@@ -874,7 +1199,7 @@ mod tests {
 
         match err {
             AppError::ResourceIntegrity { .. } => {}
-            other => panic!("expected manifest integrity error, got: {other:?}"),
+            other => panic!("expected resource integrity error, got: {other:?}"),
         }
     }
 
@@ -955,5 +1280,235 @@ mod tests {
         )
         .unwrap();
         assert!(!is_binary_only_resource(&files_with_text));
+    }
+
+    #[test]
+    fn classifier_covers_all_baseline_type_keys() {
+        let cases = vec![
+            (
+                "com.inductiveautomation.perspective/views/Main",
+                "Perspective",
+                "perspective.view",
+            ),
+            (
+                "com.inductiveautomation.perspective/page-config",
+                "Perspective",
+                "perspective.page_config",
+            ),
+            (
+                "com.inductiveautomation.perspective/style-classes/theme/default",
+                "Perspective",
+                "perspective.style_class",
+            ),
+            (
+                "com.inductiveautomation.perspective/stylesheet",
+                "Perspective",
+                "perspective.stylesheet",
+            ),
+            (
+                "com.inductiveautomation.perspective/message/toast",
+                "Perspective",
+                "perspective.message_handler",
+            ),
+            (
+                "com.inductiveautomation.perspective/form-submission-handler/Form A",
+                "Perspective",
+                "perspective.form_submission_handler",
+            ),
+            (
+                "com.inductiveautomation.perspective/key-event/Key A",
+                "Perspective",
+                "perspective.key_event",
+            ),
+            (
+                "com.inductiveautomation.perspective/startup",
+                "Perspective",
+                "perspective.startup",
+            ),
+            (
+                "com.inductiveautomation.perspective/shutdown",
+                "Perspective",
+                "perspective.shutdown",
+            ),
+            (
+                "com.inductiveautomation.perspective/accelerometer",
+                "Perspective",
+                "perspective.accelerometer",
+            ),
+            (
+                "com.inductiveautomation.perspective/barcode",
+                "Perspective",
+                "perspective.barcode",
+            ),
+            (
+                "com.inductiveautomation.perspective/bluetooth",
+                "Perspective",
+                "perspective.bluetooth",
+            ),
+            (
+                "com.inductiveautomation.perspective/auth-challenge",
+                "Perspective",
+                "perspective.auth_challenge",
+            ),
+            (
+                "com.inductiveautomation.perspective/nfc-scan",
+                "Perspective",
+                "perspective.nfc_scan",
+            ),
+            (
+                "com.inductiveautomation.perspective/page-startup",
+                "Perspective",
+                "perspective.page_startup",
+            ),
+            (
+                "com.inductiveautomation.perspective/session-props",
+                "Perspective",
+                "perspective.session_props",
+            ),
+            (
+                "ignition/script-python/my/script",
+                "Scripting",
+                "script.python",
+            ),
+            (
+                "ignition/timer/My Timer",
+                "Scripting",
+                "script.gateway_event",
+            ),
+            (
+                "ignition/named-query/My Query",
+                "Named Queries",
+                "named_query",
+            ),
+            (
+                "com.inductiveautomation.sfc/charts/Main",
+                "Sequential Function Charts (SFC)",
+                "sfc",
+            ),
+            (
+                "com.inductiveautomation.eventstream/event-streams/Main",
+                "Event Streams",
+                "event_stream",
+            ),
+            (
+                "com.inductiveautomation.reporting/reports/Main",
+                "Reports",
+                "report",
+            ),
+            (
+                "com.inductiveautomation.alarm-notification/alarm-pipelines/Main",
+                "Alarm Notification Pipelines",
+                "alarm_pipeline",
+            ),
+            ("ignition/global-props", "Properties", "project_properties"),
+        ];
+
+        for (path, expected_section, expected_type_key) in cases {
+            let classification = classify_resource_path(path);
+            assert_eq!(
+                classification.section, expected_section,
+                "section mismatch for path `{path}`"
+            );
+            assert_eq!(
+                classification.type_key, expected_type_key,
+                "type mismatch for path `{path}`"
+            );
+        }
+    }
+
+    #[test]
+    fn classifier_uses_unknown_fallback_when_no_rule_matches() {
+        let classification = classify_resource_path("com.inductiveautomation.vision/windows/Main");
+        assert_eq!(classification.section, "Other");
+        assert_eq!(classification.type_key, "unknown");
+    }
+
+    #[test]
+    fn coverage_metrics_counts_unknown_resources() {
+        let resources = vec![
+            synthetic_resource(
+                "Perspective",
+                "perspective.view",
+                "a",
+                false,
+                &["resource.json"],
+            ),
+            synthetic_resource(
+                "Other",
+                "unknown",
+                "b",
+                true,
+                &["resource.json", "data.bin"],
+            ),
+            synthetic_resource(
+                "Other",
+                "unknown",
+                "c",
+                false,
+                &["resource.json", "view.json"],
+            ),
+        ];
+
+        let coverage = compute_coverage(&resources);
+        assert_eq!(coverage.unknown_resources, 2);
+        assert!((coverage.unknown_ratio - (2.0 / 3.0)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn project_counts_aggregates_resources_files_and_maps() {
+        let resources = vec![
+            synthetic_resource(
+                "Perspective",
+                "perspective.view",
+                "com.inductiveautomation.perspective/views/Main",
+                false,
+                &["resource.json", "view.json"],
+            ),
+            synthetic_resource(
+                "Scripting",
+                "script.python",
+                "ignition/script-python/a",
+                false,
+                &["resource.json", "script"],
+            ),
+            synthetic_resource(
+                "Other",
+                "unknown",
+                "com.inductiveautomation.vision/windows/Main",
+                true,
+                &["resource.json", "data.bin"],
+            ),
+        ];
+
+        let counts = compute_project_counts(&resources);
+        assert_eq!(counts.resources_total, 3);
+        assert_eq!(counts.files_total, 6);
+        assert_eq!(counts.binary_only_resources, 1);
+
+        assert_eq!(
+            counts.resources_by_section,
+            BTreeMap::from([
+                ("Other".to_string(), 1usize),
+                ("Perspective".to_string(), 1usize),
+                ("Scripting".to_string(), 1usize),
+            ])
+        );
+        assert_eq!(
+            counts.resources_by_type,
+            BTreeMap::from([
+                ("perspective.view".to_string(), 1usize),
+                ("script.python".to_string(), 1usize),
+                ("unknown".to_string(), 1usize),
+            ])
+        );
+        assert_eq!(
+            counts.files_by_kind,
+            BTreeMap::from([
+                ("data.bin".to_string(), 1usize),
+                ("resource.json".to_string(), 3usize),
+                ("script".to_string(), 1usize),
+                ("view.json".to_string(), 1usize),
+            ])
+        );
     }
 }
