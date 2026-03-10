@@ -17,7 +17,7 @@ pub enum AppError {
         json_path: String,
         details: String,
     },
-    ManifestIntegrity {
+    ResourceIntegrity {
         details: String,
     },
     Internal {
@@ -51,6 +51,13 @@ impl AppError {
         Self::JsonParse {
             archive_path: archive_path.to_path_buf(),
             json_path: json_path.into(),
+            details: details.into(),
+        }
+    }
+
+    /// Creates a resource integrity error for validation failures.
+    pub fn resource_integrity(details: impl Into<String>) -> Self {
+        Self::ResourceIntegrity {
             details: details.into(),
         }
     }
@@ -99,7 +106,7 @@ impl Display for AppError {
                 archive_path.display(),
                 details
             ),
-            Self::ManifestIntegrity { details } => write!(f, "Manifest integrity error: {details}"),
+            Self::ResourceIntegrity { details } => write!(f, "Manifest integrity error: {details}"),
             Self::Internal { details } => write!(f, "Internal error: {details}"),
         }
     }
@@ -113,7 +120,7 @@ pub fn exit_code_for_error(err: &AppError) -> i32 {
         AppError::ArchiveRead { .. } => 10,
         AppError::ProjectRootDetection { .. } => 11,
         AppError::JsonParse { .. } => 12,
-        AppError::ManifestIntegrity { .. } => 13,
+        AppError::ResourceIntegrity { .. } => 13,
         AppError::Internal { .. } => 20,
     }
 }
