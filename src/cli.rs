@@ -4,12 +4,12 @@ use clap::{ArgAction, Parser, Subcommand};
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "ign-inspect",
+    name = "igniscope",
     version,
     about = "Deterministic analyzer for Ignition project exports and gateway backups",
     long_about = None,
     arg_required_else_help = true,
-    after_help = "Examples:\n  ign-inspect summarize ./backup.gwbk\n  ign-inspect analyze ./project.zip --out-dir ./out\n  ign-inspect -vv summarize ./project.zip"
+    after_help = "Examples:\n  igniscope summarize ./backup.gwbk\n  igniscope analyze ./project.zip --out-dir ./out\n  igniscope -vv summarize ./project.zip"
 )]
 pub struct Cli {
     /// Increase output verbosity (-v, -vv, -vvv).

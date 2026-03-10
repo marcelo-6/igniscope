@@ -131,7 +131,7 @@ sort_commits = "newest"
 
 [remote.github]
 owner = "marcelo-6"
-repo = "ign-inspect"
+repo = "igniscope"
 
 [bump]
 features_always_bump_minor = true
