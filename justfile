@@ -184,9 +184,9 @@ release-assert-clean:
 # ensure release tag is created from the configured release branch.
 [group('cd')]
 release-assert-main:
-    @branch="$$(git rev-parse --abbrev-ref HEAD)"; \
-    if [ "$$branch" != "{{release_branch}}" ]; then \
-      printf '\033[1;31m[error]\033[0m current branch is "%s", expected "{{release_branch}}".\n' "$$branch"; \
+    @branch="$(git rev-parse --abbrev-ref HEAD)"; \
+    if [ "$branch" != "{{release_branch}}" ]; then \
+      printf '\033[1;31m[error]\033[0m current branch is "%s", expected "{{release_branch}}".\n' "$branch"; \
       printf '\033[1;33m[next]\033[0m checkout {{release_branch}} and pull latest merged commit before tagging.\n'; \
       exit 1; \
     fi; \
