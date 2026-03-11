@@ -64,3 +64,7 @@ Expected outputs in `--out-dir`:
 - Keep parsing and outputs deterministic so results are reproducible
 - Dependency edges (view/script/query linking).
 - AST-based script analysis.
+
+## Roadmap
+
+- See [ROADMAP.md](ROADMAP.md) for the evolving idea log with tentative version targets.
