@@ -115,10 +115,20 @@ test: lint
 [group('development')]
 pre-release: check test lint
 
+# dry runs the publish crate
+[group('development')]
+publish-dry-run: pre-release
+    cargo publish --dry-run
+
 # build release executable
 [group('production')]
 release: pre-release
     cargo build --release
+
+# publish crate
+[group('production')]
+publish: pre-release
+    cargo publish
 
 # build and run
 [group('production')]
