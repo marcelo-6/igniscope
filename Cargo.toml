@@ -2,6 +2,16 @@
 name = "igniscope"
 version = "0.1.0"
 edition = "2024"
+authors = ["Marcelo Amorim"]
+description = "Deterministic CLI analyzer for Ignition project exports and gateway backups."
+readme = "README.md"
+repository = "https://github.com/marcelo-6/igniscope"
+homepage = "https://github.com/marcelo-6/igniscope"
+documentation = "https://docs.rs/igniscope"
+keywords = ["ignition", "scada", "cli", "analyzer", "gateway"]
+categories = ["command-line-utilities"]
+rust-version = "1.88"
+license-file = "LICENSE"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
