@@ -23,6 +23,7 @@ coverage_threshold := "70"
 # semver tag pattern
 semver_tag_pattern := "^v?[0-9]+\\.[0-9]+\\.[0-9]+$"
 release_notes_file := "RELEASE_NOTES.md"
+release_branch := "main"
 
 # show available commands
 [group('project-agnostic')]
@@ -131,6 +132,12 @@ release: pre-release
 publish: pre-release
     cargo publish
 
+# publish crate in CD (no local pre-release checks, assumes CI already passed).
+[group('cd')]
+publish-release:
+    @printf '\033[1;34m[info]\033[0m publishing crate to crates.io...\n'
+    cargo publish
+
 # build and run
 [group('production')]
 run:
@@ -150,13 +157,19 @@ release-next-version:
 [group('cd')]
 release-plan:
     @printf '\033[1;34m[info]\033[0m Recommended release flow:\n'; \
-    printf '  \033[1;33m1)\033[0m just release-prepare [X.Y.Z]\n'; \
-    printf '  \033[1;33m2)\033[0m review changed files (Cargo.toml, Cargo.lock, CHANGELOG.md, {{release_notes_file}})\n'; \
-    printf '  \033[1;33m3)\033[0m git add Cargo.toml Cargo.lock CHANGELOG.md {{release_notes_file}}\n'; \
-    printf '  \033[1;33m4)\033[0m git commit -m "chore(release): prepare for vX.Y.Z"\n'; \
-    printf '  \033[1;33m5)\033[0m just release-tag X.Y.Z\n'; \
-    printf '  \033[1;33m6)\033[0m just release-push X.Y.Z\n'; \
-    printf '  \033[1;33m7)\033[0m verify CD workflow, crates.io publish, and GitHub Release assets\n'
+    printf '  \033[1;33m1)\033[0m just release-prepare X.Y.Z\n'; \
+    printf '  \033[1;33m2)\033[0m review Cargo.toml, Cargo.lock, CHANGELOG.md, and local {{release_notes_file}}\n'; \
+    printf '  \033[1;33m3)\033[0m git add Cargo.toml Cargo.lock CHANGELOG.md\n'; \
+    printf '  \033[1;33m4)\033[0m git commit -m "chore(release): prepare vX.Y.Z"\n'; \
+    printf '  \033[1;33m5)\033[0m git push branch and wait for CI on PR/main\n'; \
+    printf '  \033[1;33m6)\033[0m after merge, checkout/pull {{release_branch}}\n'; \
+    printf '  \033[1;33m7)\033[0m just release-tag X.Y.Z\n'; \
+    printf '  \033[1;33m8)\033[0m monitor CD workflow + crates.io + GitHub Release assets\n'
+
+# run local quality checks before preparing a release (optional but recommended).
+[group('cd')]
+release-preflight: pre-release
+    @printf '\033[1;32m[ok]\033[0m local release preflight passed.\n'
 
 # ensure working tree is clean before creating release artifacts.
 [group('cd')]
@@ -167,6 +180,17 @@ release-assert-clean:
       exit 1; \
     fi; \
     printf '\033[1;32m[ok]\033[0m working tree is clean.\n'
+
+# ensure release tag is created from the configured release branch.
+[group('cd')]
+release-assert-main:
+    @branch="$$(git rev-parse --abbrev-ref HEAD)"; \
+    if [ "$$branch" != "{{release_branch}}" ]; then \
+      printf '\033[1;31m[error]\033[0m current branch is "%s", expected "{{release_branch}}".\n' "$$branch"; \
+      printf '\033[1;33m[next]\033[0m checkout {{release_branch}} and pull latest merged commit before tagging.\n'; \
+      exit 1; \
+    fi; \
+    printf '\033[1;32m[ok]\033[0m on release branch "{{release_branch}}".\n'
 
 # set package version in Cargo.toml and Cargo.lock.
 [group('cd')]
@@ -209,11 +233,11 @@ release-notes new_version=version out_file=release_notes_file:
       exit 1; \
     fi; \
     printf '\033[1;32m[ok]\033[0m wrote release notes for v%s to {{out_file}}.\n' "$target"; \
-    printf '\033[1;36m[next]\033[0m commit release files, then create and push tag v%s.\n' "$target"
+    printf '\033[1;36m[next]\033[0m local preview only; keep {{out_file}} untracked.\n'
 
-# run quality gates and generate all release files in one go.
+# prepare version + changelog + local release notes preview.
 [group('cd')]
-release-prepare new_version="": release-assert-clean pre-release
+release-prepare new_version="": release-assert-clean
     @set -eu; \
     target="{{new_version}}"; \
     if [ -z "$target" ]; then \
@@ -224,38 +248,34 @@ release-prepare new_version="": release-assert-clean pre-release
     just release-notes "$target"; \
     printf '\n\033[1;32m[ok]\033[0m release preparation complete for v%s.\n' "$target"; \
     printf '\033[1;34m[info]\033[0m Next steps:\n'; \
-    printf '  \033[1;33m1)\033[0m git add Cargo.toml Cargo.lock CHANGELOG.md {{release_notes_file}}\n'; \
-    printf '  \033[1;33m2)\033[0m git commit -m "chore(release): prepare for v%s"\n' "$target"; \
-    printf '  \033[1;33m3)\033[0m just release-tag %s\n' "$target"; \
-    printf '  \033[1;33m4)\033[0m just release-push %s\n' "$target"; \
-    printf '  \033[1;33m5)\033[0m monitor GitHub CD workflow for v%s\n' "$target"
+    printf '  \033[1;33m1)\033[0m review Cargo.toml, Cargo.lock, CHANGELOG.md, and {{release_notes_file}}\n'; \
+    printf '  \033[1;33m2)\033[0m git add Cargo.toml Cargo.lock CHANGELOG.md\n'; \
+    printf '  \033[1;33m3)\033[0m git commit -m "chore(release): prepare v%s"\n' "$target"; \
+    printf '  \033[1;33m4)\033[0m git push and wait for CI on PR/main\n'; \
+    printf '  \033[1;33m5)\033[0m after merge: git checkout {{release_branch}} && git pull\n'; \
+    printf '  \033[1;33m6)\033[0m just release-tag %s\n' "$target"
 
-# create an annotated release tag.
+# create and push an annotated release tag from main.
 [group('cd')]
-release-tag new_version:
+release-tag new_version: release-assert-clean release-assert-main
     @set -eu; \
     target="{{new_version}}"; \
+    just release-verify-tag "v$target"; \
     if git show-ref --tags --verify --quiet "refs/tags/v$target"; then \
       printf '\033[1;31m[error]\033[0m tag v%s already exists.\n' "$target"; \
       exit 1; \
     fi; \
+    if git ls-remote --tags origin "refs/tags/v$target" | grep -q .; then \
+      printf '\033[1;31m[error]\033[0m remote tag v%s already exists on origin.\n' "$target"; \
+      exit 1; \
+    fi; \
     git tag -a "v$target" -m "v$target"; \
-    printf '\033[1;32m[ok]\033[0m created tag v%s.\n' "$target"; \
-    printf '\033[1;36m[next]\033[0m just release-push %s\n' "$target"
-
-# push current branch and release tag.
-[group('cd')]
-release-push new_version:
-    @set -eu; \
-    target="{{new_version}}"; \
-    branch="$(git rev-parse --abbrev-ref HEAD)"; \
-    git push origin "$branch"; \
     git push origin "v$target"; \
-    printf '\033[1;32m[ok]\033[0m pushed branch "%s" and tag "v%s".\n' "$branch" "$target"; \
+    printf '\033[1;32m[ok]\033[0m created and pushed tag "v%s".\n' "$target"; \
     printf '\033[1;34m[info]\033[0m Next steps:\n'; \
-    printf '  \033[1;33m1)\033[0m check GitHub Actions CD workflow result\n'; \
-    printf '  \033[1;33m2)\033[0m check crates.io package publish result\n'; \
-    printf '  \033[1;33m3)\033[0m check GitHub Release assets and notes\n'
+    printf '  \033[1;33m1)\033[0m check GitHub Actions CD workflow for v%s\n' "$target"; \
+    printf '  \033[1;33m2)\033[0m check crates.io publish result\n'; \
+    printf '  \033[1;33m3)\033[0m check GitHub Release assets + notes\n'
 
 # validate that a tag value matches Cargo.toml version (for CI/CD use).
 [group('cd')]
