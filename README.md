@@ -6,7 +6,7 @@
 
 <a href="https://github.com/marcelo-6/igniscope/relseases"><img src="https://img.shields.io/github/v/release/marcelo-6/igniscope?logo=github" alt="GitHub Release"></a>
 <a href="https://crates.io/crates/igniscope/"><img src="https://img.shields.io/crates/v/igniscope?logo=Rust" alt="Crate Release"></a>
-<a href="https://codecov.io/gh/marcelo-6/igniscope"><img src="https://img.shields.io/codecov/c/gh/marcelo-6/igniscope?logo=Codecov&amp;logoColor=white" alt="Coverage"></a>
+<a href="https://codecov.io/gh/marcelo-6/igniscope"><img src="https://codecov.io/gh/marcelo-6/igniscope/graph/badge.svg?token=TPJMXTJ5ZQ&amp;logo=Codecov&amp;logoColor=white" alt="Coverage"></a>
 <br>
 <a href="https://github.com/marcelo-6/igniscope/actions?query=workflow%3A%22CI%22"><img src="https://img.shields.io/github/actions/workflow/status/marcelo-6/igniscope/ci.yml?branch=main&amp;logo=GitHub%20Actions&amp;logoColor=white&amp;label=CI" alt="Continuous Integration"></a>
 <a href="https://github.com/marcelo-6/igniscope/actions?query=workflow%3A%22CD%22"><img src="https://img.shields.io/github/actions/workflow/status/marcelo-6/igniscope/cd.yml?logo=GitHub%20Actions&amp;logoColor=white&amp;label=CD" alt="Continuous Deployment"></a>
