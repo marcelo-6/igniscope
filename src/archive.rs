@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use zip::ZipArchive;
 
@@ -42,7 +42,7 @@ pub struct ArchiveInspection {
 }
 
 /// Metadata extracted from a `project.json` document.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProjectMetadata {
     pub project_root: String,
     pub title: String,
@@ -79,7 +79,7 @@ pub struct ProjectResourceInventory {
 }
 
 /// Aggregated deterministic counters for one project resource inventory.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProjectCounts {
     pub resources_total: usize,
     pub files_total: usize,
@@ -90,7 +90,7 @@ pub struct ProjectCounts {
 }
 
 /// Coverage values derived from classified resources in one project.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CoverageMetrics {
     pub unknown_resources: usize,
     pub unknown_ratio: f64,
@@ -101,6 +101,52 @@ pub struct CoverageMetrics {
 struct Classification {
     section: &'static str,
     type_key: &'static str,
+}
+
+/// Top-level in-memory analytics bundle that mirrors `analytics.json`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AnalyticsBundle {
+    pub schema_version: String,
+    pub generated_at: String,
+    pub input: AnalyticsInput,
+    pub summary: AnalyticsSummary,
+    pub projects: Vec<ProjectAnalytics>,
+    pub issues: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gateway_meta: Option<Value>,
+}
+
+/// Input metadata for the analytics schema.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AnalyticsInput {
+    pub archive_path: String,
+    pub archive_kind: String,
+    pub detected_project_roots: Vec<String>,
+    pub selected_project_roots: Vec<String>,
+}
+
+/// Per-project analytics entry in the unified schema.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ProjectAnalytics {
+    pub project_root: String,
+    pub project: ProjectMetadata,
+    pub counts: ProjectCounts,
+    pub coverage: CoverageMetrics,
+    pub issues: Vec<String>,
+}
+
+/// Aggregate summary across all project entries.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AnalyticsSummary {
+    pub projects_total: usize,
+    pub resources_total: usize,
+    pub files_total: usize,
+    pub binary_only_resources: usize,
+    pub resources_by_section: BTreeMap<String, usize>,
+    pub resources_by_type: BTreeMap<String, usize>,
+    pub files_by_kind: BTreeMap<String, usize>,
+    pub unknown_resources: usize,
+    pub unknown_ratio: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -338,6 +384,151 @@ pub fn compute_coverage(resources: &[Resource]) -> CoverageMetrics {
     };
 
     CoverageMetrics {
+        unknown_resources,
+        unknown_ratio,
+    }
+}
+
+/// Builds a schema-aligned analytics bundle for one inspected archive.
+pub fn build_analytics_bundle(
+    archive_path: &Path,
+    generated_at: impl Into<String>,
+    inspection: &ArchiveInspection,
+    project_metadata: &[ProjectMetadata],
+    resource_inventories: &[ProjectResourceInventory],
+) -> Result<AnalyticsBundle, AppError> {
+    let mut metadata_by_root = BTreeMap::new();
+    for meta in project_metadata {
+        if metadata_by_root
+            .insert(meta.project_root.clone(), meta.clone())
+            .is_some()
+        {
+            return Err(AppError::internal(format!(
+                "duplicate project metadata entry for root `{}`",
+                meta.project_root
+            )));
+        }
+    }
+
+    let mut resources_by_root = BTreeMap::new();
+    for inventory in resource_inventories {
+        if resources_by_root
+            .insert(inventory.project_root.clone(), inventory.resources.clone())
+            .is_some()
+        {
+            return Err(AppError::internal(format!(
+                "duplicate resource inventory entry for root `{}`",
+                inventory.project_root
+            )));
+        }
+    }
+
+    let mut sorted_selected_roots = inspection.selected_project_roots.clone();
+    sorted_selected_roots.sort();
+
+    let mut projects = Vec::with_capacity(sorted_selected_roots.len());
+    for project_root in &sorted_selected_roots {
+        let project = metadata_by_root.remove(project_root).ok_or_else(|| {
+            AppError::internal(format!(
+                "missing project metadata for root `{project_root}`"
+            ))
+        })?;
+        let resources = resources_by_root.remove(project_root).ok_or_else(|| {
+            AppError::internal(format!(
+                "missing resource inventory for root `{project_root}`"
+            ))
+        })?;
+
+        projects.push(ProjectAnalytics {
+            project_root: project_root.clone(),
+            counts: compute_project_counts(&resources),
+            coverage: compute_coverage(&resources),
+            project,
+            issues: Vec::new(),
+        });
+    }
+
+    if !metadata_by_root.is_empty() {
+        let roots = metadata_by_root
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(AppError::internal(format!(
+            "project metadata roots not selected by inspection: {roots}"
+        )));
+    }
+    if !resources_by_root.is_empty() {
+        let roots = resources_by_root
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(AppError::internal(format!(
+            "resource inventory roots not selected by inspection: {roots}"
+        )));
+    }
+
+    let summary = aggregate_summary(&projects);
+
+    Ok(AnalyticsBundle {
+        schema_version: "0.1.0".to_string(),
+        generated_at: generated_at.into(),
+        input: AnalyticsInput {
+            archive_path: archive_path.display().to_string(),
+            archive_kind: inspection.archive_kind.as_str().to_string(),
+            detected_project_roots: inspection.detected_project_roots.clone(),
+            selected_project_roots: sorted_selected_roots,
+        },
+        summary,
+        projects,
+        issues: Vec::new(),
+        gateway_meta: None,
+    })
+}
+
+/// Aggregates summary counters and coverage across all project analytics entries.
+pub fn aggregate_summary(projects: &[ProjectAnalytics]) -> AnalyticsSummary {
+    let mut resources_total = 0usize;
+    let mut files_total = 0usize;
+    let mut binary_only_resources = 0usize;
+    let mut unknown_resources = 0usize;
+
+    let mut resources_by_section = BTreeMap::new();
+    let mut resources_by_type = BTreeMap::new();
+    let mut files_by_kind = BTreeMap::new();
+
+    for project in projects {
+        resources_total += project.counts.resources_total;
+        files_total += project.counts.files_total;
+        binary_only_resources += project.counts.binary_only_resources;
+        unknown_resources += project.coverage.unknown_resources;
+
+        for (key, value) in &project.counts.resources_by_section {
+            *resources_by_section.entry(key.clone()).or_insert(0usize) += value;
+        }
+        for (key, value) in &project.counts.resources_by_type {
+            *resources_by_type.entry(key.clone()).or_insert(0usize) += value;
+        }
+        for (key, value) in &project.counts.files_by_kind {
+            *files_by_kind.entry(key.clone()).or_insert(0usize) += value;
+        }
+    }
+
+    let unknown_ratio = if resources_total == 0 {
+        0.0
+    } else {
+        unknown_resources as f64 / resources_total as f64
+    };
+
+    AnalyticsSummary {
+        projects_total: projects.len(),
+        resources_total,
+        files_total,
+        binary_only_resources,
+        resources_by_section,
+        resources_by_type,
+        files_by_kind,
         unknown_resources,
         unknown_ratio,
     }
@@ -911,11 +1102,11 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        ArchiveKind, ProjectSelection, Resource, ResourceFile, build_resource_files,
-        classify_resource_path, compute_coverage, compute_project_counts, detect_archive_kind,
-        detect_gateway_project_roots, discover_resources_for_root, discover_resources_for_roots,
-        inspect_archive, is_binary_only_resource, parse_project_json_bytes, parse_project_metadata,
-        parse_resource,
+        ArchiveKind, ProjectSelection, Resource, ResourceFile, aggregate_summary,
+        build_analytics_bundle, build_resource_files, classify_resource_path, compute_coverage,
+        compute_project_counts, detect_archive_kind, detect_gateway_project_roots,
+        discover_resources_for_root, discover_resources_for_roots, inspect_archive,
+        is_binary_only_resource, parse_project_json_bytes, parse_project_metadata, parse_resource,
     };
     use crate::error::AppError;
 
@@ -1507,6 +1698,241 @@ mod tests {
                 ("data.bin".to_string(), 1usize),
                 ("resource.json".to_string(), 3usize),
                 ("script".to_string(), 1usize),
+                ("view.json".to_string(), 1usize),
+            ])
+        );
+    }
+
+    #[test]
+    fn analytics_schema_has_parity_between_project_export_and_gateway_inputs() {
+        let project_export_path = fixture_path("Template_v8.3_example.zip");
+        let project_export_inspection = inspect_archive(&project_export_path).unwrap();
+        let project_export_meta = parse_project_metadata(
+            &project_export_path,
+            &project_export_inspection.selected_project_roots,
+        )
+        .unwrap();
+        let project_export_resources = discover_resources_for_roots(
+            &project_export_path,
+            &project_export_inspection.selected_project_roots,
+        )
+        .unwrap();
+        let project_export_bundle = build_analytics_bundle(
+            &project_export_path,
+            "2026-03-10T00:00:00Z",
+            &project_export_inspection,
+            &project_export_meta,
+            &project_export_resources,
+        )
+        .unwrap();
+
+        let gateway_path = fixture_path("multi-project.gwbk");
+        let gateway_inspection = inspect_archive(&gateway_path).unwrap();
+        let gateway_meta =
+            parse_project_metadata(&gateway_path, &gateway_inspection.selected_project_roots)
+                .unwrap();
+        let gateway_resources =
+            discover_resources_for_roots(&gateway_path, &gateway_inspection.selected_project_roots)
+                .unwrap();
+        let gateway_bundle = build_analytics_bundle(
+            &gateway_path,
+            "2026-03-10T00:00:00Z",
+            &gateway_inspection,
+            &gateway_meta,
+            &gateway_resources,
+        )
+        .unwrap();
+
+        let project_export_value = serde_json::to_value(project_export_bundle).unwrap();
+        let gateway_value = serde_json::to_value(gateway_bundle).unwrap();
+
+        let project_export_keys: BTreeSet<String> = project_export_value
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        let gateway_keys: BTreeSet<String> =
+            gateway_value.as_object().unwrap().keys().cloned().collect();
+
+        assert_eq!(project_export_keys, gateway_keys);
+        assert_eq!(
+            project_export_keys,
+            BTreeSet::from([
+                "generated_at".to_string(),
+                "input".to_string(),
+                "issues".to_string(),
+                "projects".to_string(),
+                "schema_version".to_string(),
+                "summary".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn analytics_aggregation_matches_project_entries_for_multi_project_fixture() {
+        let gateway_path = fixture_path("multi-project.gwbk");
+        let inspection = inspect_archive(&gateway_path).unwrap();
+        let project_meta =
+            parse_project_metadata(&gateway_path, &inspection.selected_project_roots).unwrap();
+        let resources =
+            discover_resources_for_roots(&gateway_path, &inspection.selected_project_roots)
+                .unwrap();
+        let bundle = build_analytics_bundle(
+            &gateway_path,
+            "2026-03-10T00:00:00Z",
+            &inspection,
+            &project_meta,
+            &resources,
+        )
+        .unwrap();
+
+        assert_eq!(bundle.projects.len(), 8);
+        let roots: Vec<String> = bundle
+            .projects
+            .iter()
+            .map(|project| project.project_root.clone())
+            .collect();
+        let mut sorted_roots = roots.clone();
+        sorted_roots.sort();
+        assert_eq!(roots, sorted_roots);
+
+        let resources_total_from_projects: usize = bundle
+            .projects
+            .iter()
+            .map(|project| project.counts.resources_total)
+            .sum();
+        let files_total_from_projects: usize = bundle
+            .projects
+            .iter()
+            .map(|project| project.counts.files_total)
+            .sum();
+        let binary_total_from_projects: usize = bundle
+            .projects
+            .iter()
+            .map(|project| project.counts.binary_only_resources)
+            .sum();
+        let unknown_total_from_projects: usize = bundle
+            .projects
+            .iter()
+            .map(|project| project.coverage.unknown_resources)
+            .sum();
+
+        assert_eq!(bundle.summary.projects_total, bundle.projects.len());
+        assert_eq!(
+            bundle.summary.resources_total,
+            resources_total_from_projects
+        );
+        assert_eq!(bundle.summary.files_total, files_total_from_projects);
+        assert_eq!(
+            bundle.summary.binary_only_resources,
+            binary_total_from_projects
+        );
+        assert_eq!(
+            bundle.summary.unknown_resources,
+            unknown_total_from_projects
+        );
+
+        let expected_ratio = if resources_total_from_projects == 0 {
+            0.0
+        } else {
+            unknown_total_from_projects as f64 / resources_total_from_projects as f64
+        };
+        assert!((bundle.summary.unknown_ratio - expected_ratio).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn analytics_aggregation_function_merges_maps_deterministically() {
+        let project_a = super::ProjectAnalytics {
+            project_root: "a".to_string(),
+            project: super::ProjectMetadata {
+                project_root: "a".to_string(),
+                title: "A".to_string(),
+                description: None,
+                parent: None,
+                enabled: true,
+                inheritable: false,
+            },
+            counts: super::ProjectCounts {
+                resources_total: 1,
+                files_total: 2,
+                binary_only_resources: 0,
+                resources_by_section: BTreeMap::from([("Perspective".to_string(), 1usize)]),
+                resources_by_type: BTreeMap::from([("perspective.view".to_string(), 1usize)]),
+                files_by_kind: BTreeMap::from([
+                    ("resource.json".to_string(), 1usize),
+                    ("view.json".to_string(), 1usize),
+                ]),
+            },
+            coverage: super::CoverageMetrics {
+                unknown_resources: 0,
+                unknown_ratio: 0.0,
+            },
+            issues: vec![],
+        };
+        let project_b = super::ProjectAnalytics {
+            project_root: "b".to_string(),
+            project: super::ProjectMetadata {
+                project_root: "b".to_string(),
+                title: "B".to_string(),
+                description: None,
+                parent: None,
+                enabled: true,
+                inheritable: false,
+            },
+            counts: super::ProjectCounts {
+                resources_total: 2,
+                files_total: 3,
+                binary_only_resources: 1,
+                resources_by_section: BTreeMap::from([
+                    ("Other".to_string(), 1usize),
+                    ("Scripting".to_string(), 1usize),
+                ]),
+                resources_by_type: BTreeMap::from([
+                    ("script.python".to_string(), 1usize),
+                    ("unknown".to_string(), 1usize),
+                ]),
+                files_by_kind: BTreeMap::from([
+                    ("data.bin".to_string(), 1usize),
+                    ("resource.json".to_string(), 2usize),
+                ]),
+            },
+            coverage: super::CoverageMetrics {
+                unknown_resources: 1,
+                unknown_ratio: 0.5,
+            },
+            issues: vec![],
+        };
+
+        let summary = aggregate_summary(&[project_a, project_b]);
+
+        assert_eq!(summary.projects_total, 2);
+        assert_eq!(summary.resources_total, 3);
+        assert_eq!(summary.files_total, 5);
+        assert_eq!(summary.binary_only_resources, 1);
+        assert_eq!(summary.unknown_resources, 1);
+        assert!((summary.unknown_ratio - (1.0 / 3.0)).abs() < f64::EPSILON);
+        assert_eq!(
+            summary.resources_by_section,
+            BTreeMap::from([
+                ("Other".to_string(), 1usize),
+                ("Perspective".to_string(), 1usize),
+                ("Scripting".to_string(), 1usize),
+            ])
+        );
+        assert_eq!(
+            summary.resources_by_type,
+            BTreeMap::from([
+                ("perspective.view".to_string(), 1usize),
+                ("script.python".to_string(), 1usize),
+                ("unknown".to_string(), 1usize),
+            ])
+        );
+        assert_eq!(
+            summary.files_by_kind,
+            BTreeMap::from([
+                ("data.bin".to_string(), 1usize),
+                ("resource.json".to_string(), 3usize),
                 ("view.json".to_string(), 1usize),
             ])
         );

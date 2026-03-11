@@ -54,7 +54,7 @@ mod tests {
 
     #[test]
     fn summarize_parses_with_required_archive_path() {
-        let cli = parse_ok(&["ign-inspect", "summarize", "sample.zip"]);
+        let cli = parse_ok(&["igniscope", "summarize", "sample.zip"]);
         assert_eq!(cli.verbose, 0);
 
         match cli.command {
@@ -67,13 +67,7 @@ mod tests {
 
     #[test]
     fn analyze_parses_with_required_out_dir() {
-        let cli = parse_ok(&[
-            "ign-inspect",
-            "analyze",
-            "sample.gwbk",
-            "--out-dir",
-            "./out",
-        ]);
+        let cli = parse_ok(&["igniscope", "analyze", "sample.gwbk", "--out-dir", "./out"]);
         assert_eq!(cli.verbose, 0);
 
         match cli.command {
@@ -90,25 +84,25 @@ mod tests {
 
     #[test]
     fn analyze_missing_out_dir_returns_usage_error() {
-        let err = Cli::try_parse_from(["ign-inspect", "analyze", "sample.zip"]).unwrap_err();
+        let err = Cli::try_parse_from(["igniscope", "analyze", "sample.zip"]).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
     }
 
     #[test]
     fn unknown_subcommand_returns_usage_error() {
-        let err = Cli::try_parse_from(["ign-inspect", "inspect", "sample.zip"]).unwrap_err();
+        let err = Cli::try_parse_from(["igniscope", "inspect", "sample.zip"]).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidSubcommand);
     }
 
     #[test]
     fn verbose_count_supports_multiple_v_flags() {
-        let v1 = parse_ok(&["ign-inspect", "-v", "summarize", "sample.zip"]);
+        let v1 = parse_ok(&["igniscope", "-v", "summarize", "sample.zip"]);
         assert_eq!(v1.verbose, 1);
 
-        let v2 = parse_ok(&["ign-inspect", "-vv", "summarize", "sample.zip"]);
+        let v2 = parse_ok(&["igniscope", "-vv", "summarize", "sample.zip"]);
         assert_eq!(v2.verbose, 2);
 
-        let v3 = parse_ok(&["ign-inspect", "-vvv", "summarize", "sample.zip"]);
+        let v3 = parse_ok(&["igniscope", "-vvv", "summarize", "sample.zip"]);
         assert_eq!(v3.verbose, 3);
     }
 }

@@ -1,7 +1,7 @@
 use clap::Parser;
-use ign_inspect::app;
-use ign_inspect::cli::{Cli, Command};
-use ign_inspect::error::exit_code_for_error;
+use igniscope::app;
+use igniscope::cli::{Cli, Command};
+use igniscope::error::exit_code_for_error;
 
 fn main() {
     let cli = Cli::parse();
