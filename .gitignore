@@ -1,3 +1,6 @@
 /target
 
 /secrets
+
+# for manual review of auto generated release notes
+RELEASE_NOTES.md
