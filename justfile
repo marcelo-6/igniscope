@@ -22,6 +22,7 @@ coverage_threshold := "70"
 
 # semver tag pattern
 semver_tag_pattern := "^v?[0-9]+\\.[0-9]+\\.[0-9]+$"
+release_notes_file := "RELEASE_NOTES.md"
 
 # show available commands
 [group('project-agnostic')]
@@ -83,6 +84,162 @@ changelog-dry-run:
     next="$(git-cliff --config cliff.toml --bumped-version --unreleased --tag-pattern '{{semver_tag_pattern}}')"; \
     echo "Project version {{version}} -> next ${next}"
     git-cliff --config cliff.toml --unreleased --tag "${next}" --tag-pattern '{{semver_tag_pattern}}'
+
+# print the next semantic version inferred from conventional commits.
+[group('cd')]
+release-next-version:
+    @next="$(git-cliff --config cliff.toml --bumped-version --unreleased --tag-pattern '{{semver_tag_pattern}}')"; \
+    if [ -z "$next" ]; then \
+      echo "Error: could not infer next version from git history."; \
+      exit 1; \
+    fi; \
+    echo "$next"
+
+# print the full manual release checklist.
+[group('cd')]
+release-plan:
+    @echo "Recommended release flow:"; \
+    echo "  1) just release-prepare [X.Y.Z]"; \
+    echo "  2) review changed files (Cargo.toml, Cargo.lock, CHANGELOG.md, {{release_notes_file}})"; \
+    echo "  3) git add Cargo.toml Cargo.lock CHANGELOG.md {{release_notes_file}}"; \
+    echo "  4) git commit -m \"chore(release): prepare for vX.Y.Z\""; \
+    echo "  5) just release-tag X.Y.Z"; \
+    echo "  6) just release-push X.Y.Z"; \
+    echo "  7) verify CD workflow, crates.io publish, and GitHub Release assets"
+
+# ensure working tree is clean before creating release artifacts.
+[group('cd')]
+release-assert-clean:
+    @if ! git diff --quiet || ! git diff --cached --quiet; then \
+      echo "Error: git working tree is not clean."; \
+      echo "Commit/stash changes before running release recipes."; \
+      exit 1; \
+    fi; \
+    echo "Working tree is clean."
+
+# set package version in Cargo.toml and Cargo.lock.
+[group('cd')]
+release-bump new_version="":
+    @set -eu; \
+    target="{{new_version}}"; \
+    if [ -z "$target" ]; then \
+      target="$(git-cliff --config cliff.toml --bumped-version --unreleased --tag-pattern '{{semver_tag_pattern}}')"; \
+    fi; \
+    if ! echo "$target" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then \
+      echo "Error: version must match X.Y.Z (got '$target')."; \
+      exit 1; \
+    fi; \
+    sed -i -E '0,/^version = ".*"/s//version = "'"$target"'"/' Cargo.toml; \
+    awk -v v="$target" 'BEGIN{pkg=0;done=0} /^\[\[package\]\]/{pkg=0} /^name = "igniscope"$/ {pkg=1} pkg && /^version = "/ && !done {$0="version = \"" v "\""; done=1} {print}' Cargo.lock > Cargo.lock.tmp; \
+    mv Cargo.lock.tmp Cargo.lock; \
+    echo "Version bumped to $target in Cargo.toml and Cargo.lock."; \
+    echo "Next step: just release-changelog $target"
+
+# generate CHANGELOG.md with unreleased entries materialized as the release version.
+[group('cd')]
+release-changelog new_version=version:
+    @set -eu; \
+    target="{{new_version}}"; \
+    git-cliff --config cliff.toml --unreleased --tag "$target" --tag-pattern '{{semver_tag_pattern}}' --output CHANGELOG.md; \
+    echo "Updated CHANGELOG.md for v$target."; \
+    echo "Next step: just release-notes $target"
+
+# extract release notes for one version from CHANGELOG.md.
+[group('cd')]
+release-notes new_version=version out_file=release_notes_file:
+    @set -eu; \
+    target="{{new_version}}"; \
+    awk -v v="$target" '\
+      $0 ~ "^## \\[" v "\\]" {in_section=1; print; next} \
+      $0 ~ "^## \\[" && in_section {exit} \
+      in_section {print}' CHANGELOG.md > "{{out_file}}"; \
+    if [ ! -s "{{out_file}}" ]; then \
+      echo "Error: failed to extract release notes for v$target from CHANGELOG.md."; \
+      exit 1; \
+    fi; \
+    echo "Wrote release notes for v$target to {{out_file}}."; \
+    echo "Next step: commit release files, then create and push tag v$target"
+
+# run quality gates and generate all release files in one go.
+[group('cd')]
+release-prepare new_version="": release-assert-clean pre-release
+    @set -eu; \
+    target="{{new_version}}"; \
+    if [ -z "$target" ]; then \
+      target="$(git-cliff --config cliff.toml --bumped-version --unreleased --tag-pattern '{{semver_tag_pattern}}')"; \
+    fi; \
+    just release-bump "$target"; \
+    just release-changelog "$target"; \
+    just release-notes "$target"; \
+    echo ""; \
+    echo "Release preparation complete for v$target."; \
+    echo "Next steps:"; \
+    echo "  1) git add Cargo.toml Cargo.lock CHANGELOG.md {{release_notes_file}}"; \
+    echo "  2) git commit -m \"chore(release): prepare for v$target\""; \
+    echo "  3) just release-tag $target"; \
+    echo "  4) just release-push $target"; \
+    echo "  5) monitor GitHub CD workflow for v$target"
+
+# create an annotated release tag.
+[group('cd')]
+release-tag new_version:
+    @set -eu; \
+    target="{{new_version}}"; \
+    if git show-ref --tags --verify --quiet "refs/tags/v$target"; then \
+      echo "Error: tag v$target already exists."; \
+      exit 1; \
+    fi; \
+    git tag -a "v$target" -m "v$target"; \
+    echo "Created tag v$target."; \
+    echo "Next step: just release-push $target"
+
+# push current branch and release tag.
+[group('cd')]
+release-push new_version:
+    @set -eu; \
+    target="{{new_version}}"; \
+    branch="$(git rev-parse --abbrev-ref HEAD)"; \
+    git push origin "$branch"; \
+    git push origin "v$target"; \
+    echo "Pushed branch '$branch' and tag 'v$target'."; \
+    echo "Next steps:"; \
+    echo "  1) check GitHub Actions CD workflow result"; \
+    echo "  2) check crates.io package publish result"; \
+    echo "  3) check GitHub Release assets and notes"
+
+# validate that a tag value matches Cargo.toml version (for CI/CD use).
+[group('cd')]
+release-verify-tag tag:
+    @set -eu; \
+    raw="{{tag}}"; \
+    target="${raw#v}"; \
+    if ! echo "$target" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then \
+      echo "Error: tag '$raw' is not semver (expected vX.Y.Z or X.Y.Z)."; \
+      exit 1; \
+    fi; \
+    cargo_version="$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -1)"; \
+    if [ "$target" != "$cargo_version" ]; then \
+      echo "Error: tag version '$target' does not match Cargo.toml version '$cargo_version'."; \
+      exit 1; \
+    fi; \
+    echo "Tag '$raw' matches Cargo.toml version '$cargo_version'."
+
+# build and package the release binary for current runner OS.
+[group('cd')]
+release-artifact out_dir="dist":
+    @set -eu; \
+    cargo build --release; \
+    mkdir -p "{{out_dir}}"; \
+    if [ -f target/release/igniscope.exe ]; then \
+      cp target/release/igniscope.exe "{{out_dir}}/igniscope-x86_64-pc-windows-msvc.exe"; \
+      echo "Wrote {{out_dir}}/igniscope-x86_64-pc-windows-msvc.exe"; \
+    elif [ -f target/release/igniscope ]; then \
+      cp target/release/igniscope "{{out_dir}}/igniscope-x86_64-unknown-linux-gnu"; \
+      echo "Wrote {{out_dir}}/igniscope-x86_64-unknown-linux-gnu"; \
+    else \
+      echo "Error: release binary not found under target/release."; \
+      exit 1; \
+    fi
 
 # show dependencies of this project
 [group('development')]
