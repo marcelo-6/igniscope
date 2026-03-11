@@ -5,7 +5,7 @@
 # Rust: https://rust-lang.org/tools/install
 cargo := require("cargo")
 rustc := require("rustc")
-git-cliff := require("git-cliff")
+# git-cliff := require("git-cliff")
 
 # ---------------------------------------------------------------------------- #
 #                                    RECIPES                                   #
