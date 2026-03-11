@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scaffold Clap CLI parsing and added basic tests  by @marcelo-6 ([d9c2a14](https://github.com/marcelo-6/igniscope/commit/d9c2a14b3a7d6d489bbe5d1e6b7fa229f07d1c76))
 
 
+### <!-- 1 -->Bug Fixes
+- Fix assertion for just release  ([dad0b5b](https://github.com/marcelo-6/igniscope/commit/dad0b5bc873b1d06b96f21d8a26591bfc7ba0238))
+
+
 ### <!-- 3 -->Documentation
 - Add codecov report badge to readme  by @marcelo-6 ([68021d2](https://github.com/marcelo-6/igniscope/commit/68021d22df07c638dee30af11b112514a575b1eb))
 
@@ -41,15 +45,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### <!-- 7 -->Miscellaneous Tasks
-- Preparing for cd workflow and release  ([8fadf18](https://github.com/marcelo-6/igniscope/commit/8fadf1837e00f3bbbcb1a1868bdc4ba1080f316a))
+- Ignore vscode workspace settings  ([cef96c1](https://github.com/marcelo-6/igniscope/commit/cef96c1c96623a478d7f8f125c530c1f1df6946c))
 
-- Add cd workflow to publish and create github release  ([a3a8075](https://github.com/marcelo-6/igniscope/commit/a3a80753ebfd3432044d21f6adfc75ae0f42f50e))
+- Prepare v0.1.0  by @marcelo-6 in [#2](https://github.com/marcelo-6/igniscope/pull/2) ([1cdb320](https://github.com/marcelo-6/igniscope/commit/1cdb32091bda80c87764e3ab0f0f6945beb2278f))
 
-- Added color to release plan echo  ([00c1e80](https://github.com/marcelo-6/igniscope/commit/00c1e805170ef608dcf13fb36048f9c2ac9e012f))
+- Preparing for cd workflow and release  by @marcelo-6 ([02920ba](https://github.com/marcelo-6/igniscope/commit/02920ba3c0ed89d6e0d1b328a1ceda1bed7e7a83))
 
-- Ignore release notes  ([32c8360](https://github.com/marcelo-6/igniscope/commit/32c83602dae6ae0d16bb154ebf0bb85bbb3abdef))
+- Add cd workflow to publish and create github release  by @marcelo-6 ([846dfaf](https://github.com/marcelo-6/igniscope/commit/846dfafa5733a385e11b79188418fbd04a26596c))
 
-- Add release workflow to justfile  ([07ce678](https://github.com/marcelo-6/igniscope/commit/07ce678787e5c4a8f3a6d89b5e6e6b943249c295))
+- Added color to release plan echo  by @marcelo-6 ([24a6829](https://github.com/marcelo-6/igniscope/commit/24a6829d73d7da051432777bd2849fc715cb7701))
+
+- Ignore release notes  by @marcelo-6 ([9b6d4b0](https://github.com/marcelo-6/igniscope/commit/9b6d4b0c608c66f9d377d7c1b8cd0c9d227c4f09))
+
+- Add release workflow to justfile  by @marcelo-6 ([147065e](https://github.com/marcelo-6/igniscope/commit/147065ef8852ff550b94b9cfd5baf1178a12ee69))
 
 - Add dependabot version updates  by @marcelo-6 ([6a4e4a6](https://github.com/marcelo-6/igniscope/commit/6a4e4a66b610a57869619c34bc2828707a1fa0a1))
 
@@ -77,6 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### <!-- 9 -->Revert
-- Track release notes to allow manual changes before being released  ([16f04bd](https://github.com/marcelo-6/igniscope/commit/16f04bd9f8531256aefeb0b7b470e845f6582c27))
+- Track release notes to allow manual changes before being released  by @marcelo-6 ([2c96469](https://github.com/marcelo-6/igniscope/commit/2c96469d83bed1b82bc85c59abf48f13c996e176))
 
+
+### New Contributors
+* @marcelo-6 made their first contribution in [#1](https://github.com/marcelo-6/igniscope/pull/1)
 
