@@ -1,4 +1,4 @@
-name: CD
+name: CD Release
 
 on:
   push:
@@ -31,6 +31,15 @@ jobs:
         uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: just
+
+      - name: Ensure tag commit is on main
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+            echo "Tag commit is not reachable from origin/main"
+            exit 1
+          fi
 
       # Version/changelog bumping is expected before tag creation.
       - name: Verify tag matches Cargo.toml version
@@ -102,7 +111,7 @@ jobs:
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: just publish
+        run: just publish-release
 
   release:
     name: Create GitHub Release
