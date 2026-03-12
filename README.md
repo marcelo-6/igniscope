@@ -2,7 +2,7 @@
 <!-- markdownlint-disable MD041 -->
 <div align="center">
 
-<h4>A CLI tool that parses Ignition project exports and gateway backups.</h4>
+<h4>A CLI tool that parses <a href="https://ia.io">Ignition</a> project exports and gateway backups.</h4>
 
 <a href="https://github.com/marcelo-6/igniscope/relseases"><img src="https://img.shields.io/github/v/release/marcelo-6/igniscope?logo=github" alt="GitHub Release"></a>
 <a href="https://crates.io/crates/igniscope/"><img src="https://img.shields.io/crates/v/igniscope?logo=Rust" alt="Crate Release"></a>
@@ -14,7 +14,7 @@
 
 <img alt="Crates.io Total Downloads" src="https://img.shields.io/crates/d/igniscope?logo=Rust">
 <img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/marcelo-6/igniscope/total?logo=GitHub">
-
+<br>
 <img alt="GitHub commits since latest release" src="https://img.shields.io/github/commits-since/marcelo-6/igniscope/latest">
 
 </div>
