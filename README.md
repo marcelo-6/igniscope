@@ -21,17 +21,18 @@
 
 ## Installation
 
-From source (current recommended way):
+From crates.io:
+
+```bash
+cargo install igniscope
+```
+
+From source, clone the repo then:
 
 ```bash
 cargo install --path .
 ```
 
-This installs the `igniscope` binary.
-
-Planned:
-
-- crates.io publish
 
 ## How To Use
 
