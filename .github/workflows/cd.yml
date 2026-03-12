@@ -55,7 +55,7 @@ jobs:
         run: just release-notes "${{ steps.version.outputs.value }}" RELEASE_NOTES.md
 
       - name: Upload release notes artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: RELEASE_NOTES.md
@@ -87,7 +87,7 @@ jobs:
         run: just release-artifact dist
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binaries-${{ matrix.artifact_label }}
           path: dist/*
