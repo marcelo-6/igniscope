@@ -12,12 +12,16 @@
 <a href="https://github.com/marcelo-6/igniscope/actions?query=workflow%3A%22CD%22"><img src="https://img.shields.io/github/actions/workflow/status/marcelo-6/igniscope/cd.yml?logo=GitHub%20Actions&amp;logoColor=white&amp;label=CD" alt="Continuous Deployment"></a>
 <a href="https://docs.rs/igniscope/"><img src="https://img.shields.io/docsrs/igniscope?logo=Rust&amp;logoColor=white" alt="Documentation"></a>
 
+<img alt="Crates.io Total Downloads" src="https://img.shields.io/crates/d/igniscope?logo=Rust">
+<img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/marcelo-6/igniscope/total?logo=GitHub">
+
+<img alt="GitHub commits since latest release" src="https://img.shields.io/github/commits-since/marcelo-6/igniscope/latest">
+
 </div>
 
 ## Features
 
 - Deterministic zip archive parsing for project exports (`.zip`) and gateway backups (`.gwbk`)
-- Clear, typed error handling with stable exit codes
 
 ## Installation
 
