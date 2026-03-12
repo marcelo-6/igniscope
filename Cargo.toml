@@ -12,7 +12,14 @@ keywords = ["ignition", "scada", "cli", "analyzer", "gateway"]
 categories = ["command-line-utilities"]
 rust-version = "1.88"
 license = "MIT"
-
+include = [
+    "/src/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+]
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
