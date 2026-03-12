@@ -109,9 +109,18 @@ jobs:
           tool: just
 
       - name: Publish to crates.io
+        id: publish_crate
+        continue-on-error: true
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: just publish-release
+
+      - name: Warn if crates.io publish failed
+        if: steps.publish_crate.outcome == 'failure'
+        run: |
+          echo "::warning title=crates.io publish failed::GitHub release will continue. Publish manually with 'cargo publish'."
+          echo "### crates.io publish" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Status: failed (non-blocking). Publish manually with \`cargo publish\`." >> "$GITHUB_STEP_SUMMARY"
 
   release:
     name: Create GitHub Release
